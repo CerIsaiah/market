@@ -14,6 +14,7 @@ Copy `.env.example` to `.env` and fill:
 - `GOOGLE_SHEET_ID`
 - `GOOGLE_SERVICE_ACCOUNT_EMAIL`
 - `GOOGLE_PRIVATE_KEY`
+- Optional: `SUBREDDIT_ALLOWLIST` (comma-separated, supports `*` suffix for prefix match)
 - Optional: `SLACK_WEBHOOK_URL`
 
 ## 3) Inbound email provider

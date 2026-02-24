@@ -10,6 +10,13 @@ function required(name: string): string {
   return value;
 }
 
+function parseSubredditAllowlist(raw: string): string[] {
+  return raw
+    .split(',')
+    .map((entry) => entry.trim().toLowerCase().replace(/^r\//, ''))
+    .filter(Boolean);
+}
+
 export const config = {
   port: Number(process.env.PORT || 4321),
   openAiKey: required('OPENAI_API_KEY'),
@@ -20,5 +27,6 @@ export const config = {
   slackWebhookUrl: process.env.SLACK_WEBHOOK_URL || '',
   alertMinScore: Number(process.env.ALERT_MIN_SCORE || 70),
   freshnessHalfLifeHours: Number(process.env.FRESHNESS_HALF_LIFE_HOURS || 8),
-  weeklyReportHourUtc: Number(process.env.WEEKLY_REPORT_CRON_HOUR_UTC || 14)
+  weeklyReportHourUtc: Number(process.env.WEEKLY_REPORT_CRON_HOUR_UTC || 14),
+  subredditAllowlist: parseSubredditAllowlist(process.env.SUBREDDIT_ALLOWLIST || '')
 };

@@ -21,6 +21,22 @@ function statusFromScore(score: number): 'Hot' | 'Warm' | 'Low' | 'DoNotTouch' {
   return 'DoNotTouch';
 }
 
+function subredditAllowed(subreddit: string): boolean {
+  const rules = config.subredditAllowlist;
+  if (rules.length === 0) {
+    return true;
+  }
+
+  const normalized = subreddit.trim().toLowerCase();
+  return rules.some((rule) => {
+    if (rule.endsWith('*')) {
+      const prefix = rule.slice(0, -1);
+      return normalized.startsWith(prefix);
+    }
+    return normalized === rule;
+  });
+}
+
 async function getSubredditSelfPromoAllowed(subreddit: string): Promise<boolean> {
   const rows = await sheetsClient.readRange(`${SHEET_NAMES.SubredditRules}!A:E`);
   const match = rows.slice(1).find((r) => (r[0] || '').toLowerCase() === subreddit.toLowerCase());
@@ -54,6 +70,17 @@ function finalMentionPolicy(
   return 'optional';
 }
 
+function buildOperatorBrief(gpt: GptOpportunityScore): string {
+  const focus = gpt.focusSummary.trim();
+  const ideas = gpt.shortReplyIdeas
+    .map((idea) => idea.trim())
+    .filter((idea) => idea.length > 0)
+    .slice(0, 3)
+    .join(' | ');
+  const why = gpt.rationale.trim();
+  return `Focus: ${focus}\nSay: ${ideas}\nWhy: ${why}`;
+}
+
 function blockedGptFallback(): GptOpportunityScore {
   return {
     relevance: 0,
@@ -61,6 +88,11 @@ function blockedGptFallback(): GptOpportunityScore {
     brandFit: 0,
     conversationNaturalness: 0,
     sensitivityRisk: 100,
+    focusSummary: 'Skip outreach: safety policy flagged this context as not suitable for marketing.',
+    shortReplyIdeas: [
+      'Offer empathy first.',
+      'Avoid brand mention.'
+    ],
     rationale: 'Opportunity blocked by safety policy',
     mentionRecommendation: 'never',
     responseDraftsBrandMentioned: [],
@@ -70,12 +102,22 @@ function blockedGptFallback(): GptOpportunityScore {
 
 export async function processIncomingAlert(alert: NormalizedAlert): Promise<{
   duplicate: boolean;
+  skipped?: boolean;
+  skipReason?: string;
   opportunityId?: string;
   evaluation?: OpportunityEvaluation;
 }> {
   if (!alert.permalink) {
     logger.warn('Skipping alert without permalink', { alertId: alert.alertId });
-    return { duplicate: true };
+    return { duplicate: true, skipped: true, skipReason: 'missing_permalink' };
+  }
+
+  if (!subredditAllowed(alert.subreddit)) {
+    logger.info('Skipping alert outside subreddit allowlist', {
+      subreddit: alert.subreddit,
+      permalink: alert.permalink
+    });
+    return { duplicate: false, skipped: true, skipReason: 'subreddit_not_allowlisted' };
   }
 
   if (await alreadySeenDedupe(alert.dedupeHash)) {
@@ -107,6 +149,7 @@ export async function processIncomingAlert(alert: NormalizedAlert): Promise<{
   const finalScore = clampScore(base.baseScore * 0.45 + gptScoreComposite * 0.55 - riskPenalty);
   const status = safety.allowed ? statusFromScore(finalScore) : 'DoNotTouch';
   const mentionPolicy = finalMentionPolicy(base.recommendedMentionPolicy, gpt.mentionRecommendation, safety.forceValueOnly);
+  const operatorBrief = buildOperatorBrief(gpt);
   const opportunityId = sha256(`${alert.permalink}|${alert.dedupeHash}`).slice(0, 16);
 
   await sheetsClient.appendRows(SHEET_NAMES.Opportunities, [[
@@ -121,7 +164,7 @@ export async function processIncomingAlert(alert: NormalizedAlert): Promise<{
     status,
     safety.riskLabel,
     mentionPolicy,
-    gpt.rationale,
+    operatorBrief,
     'pending',
     ''
   ]]);

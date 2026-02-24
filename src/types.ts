@@ -54,6 +54,8 @@ export interface GptOpportunityScore {
   brandFit: number;
   conversationNaturalness: number;
   sensitivityRisk: number;
+  focusSummary: string;
+  shortReplyIdeas: string[];
   rationale: string;
   mentionRecommendation: MentionPolicy;
   responseDraftsBrandMentioned: string[];
