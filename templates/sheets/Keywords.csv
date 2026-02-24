@@ -1,0 +1,3 @@
+keyword,importance,intentTag,mentionPolicy,notes,active
+dating app opener,9,texting_help,optional,high intent,true
+breakup grief,10,sensitive,never,suppress promo,true
